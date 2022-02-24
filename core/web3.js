@@ -1,17 +1,15 @@
 import Web3 from 'web3';
 import { NotificationManager } from 'react-notifications';
-import { tetherUSDTAddress, presaleContractAddr, wUTILAddress, POLYGON_CHAIN_ID } from './config';
+import { escrowContractAddr, mainContractAddr, RINKEBY_CHAIN_ID } from './config';
 
-const usdtTokenABI = require('./tetherUSDTABI.json');
-const presaleContractABI = require('./presaleContractABI.json');
-const wUtilERC20ABI = require('./erc20.json');
-let usdtTokenContract = null;
-let presaleContract = null;
-let wUtilERC20TokenContract = null;
+const escrowABI = require('./escrowABI.json');
+const mainABI = require('./mainABI.json');
+let mainContract = null;
+let escrowContract = null;
 
 const checkConnectedNetwork = (chainId) => {
-    if (chainId != POLYGON_CHAIN_ID) {
-        NotificationManager.warning('Chain Connection Warning', 'Please select Polygon network', 3000);
+    if (chainId != RINKEBY_CHAIN_ID) {
+        // NotificationManager.warning('Chain Connection Warning', 'Please select Rinkeby network', 3000);
         return false;
     }
 
@@ -19,35 +17,19 @@ const checkConnectedNetwork = (chainId) => {
 }
 
 const loadContracts = async () => {
-    // const chainId = await getConnectedNetworkId();
-    // if (checkConnectedNetwork(chainId) == false) {
-    //     return;
-    // }
-
-    if (presaleContract === null) {
+    if (escrowContract === null) {
         try {
-            presaleContract = new window.web3.eth.Contract(presaleContractABI, presaleContractAddr);
+            escrowContract = new window.web3.eth.Contract(escrowABI, escrowContractAddr);
         } catch (error) {
-            presaleContract = null;
-            console.log('presaleContract load error: ', error);
+            escrowContract = null;
         }
     }
 
-    if (usdtTokenContract === null) {
+    if (mainContract === null) {
         try {
-            usdtTokenContract = new window.web3.eth.Contract(usdtTokenABI, tetherUSDTAddress);
+            mainContract = new window.web3.eth.Contract(mainABI, mainContractAddr);
         } catch (error) {
-            usdtTokenContract = null;
-            console.log('usdt token contract load error: ', error);
-        }
-    }
-
-    if (wUtilERC20TokenContract === null) {
-        try {
-            wUtilERC20TokenContract = new window.web3.eth.Contract(wUtilERC20ABI, wUTILAddress);
-        } catch (error) {
-            wUtilERC20TokenContract = null;
-            console.log('wUTIL token contract load error: ', error);
+            mainContract = null;
         }
     }
 }
@@ -56,9 +38,17 @@ export const loadWeb3 = async () => {
     if (window.ethereum) {
         window.web3 = new Web3(window.ethereum);
         window.web3.eth.handleRevert = true;
+
+        if (checkConnectedNetwork(await getConnectedNetworkId()) == true) {
+            loadContracts();
+        }
     } else if (window.web3) {
         window.web3 = new Web3(window.web3.currentProvider);
         window.web3.eth.handleRevert = true
+
+        if (checkConnectedNetwork(await getConnectedNetworkId()) == true) {
+            loadContracts();
+        }
     } else {
         window.alert(
             "Non-Ethereum browser detected. You should consider trying MetaMask!"
@@ -169,38 +159,15 @@ export const getCurrentWalletConnected = async () => {
     }
 };
 
-// export const getTokenBalance = async (web3, abi, tokenAddr, walletAddress) => {
-//     if (walletAddress.length === 0) {
-//         console.log('wallet addr is empty');
-//         return null;
-//     }
-
-//     try {
-//         const contract = new web3.eth.Contract(abi, tokenAddr, { from: walletAddress });
-//         let balance = await contract.methods.balanceOf(walletAddress).call();
-//         balance = web3.utils.fromWei(balance);
-//         return balance;
-
-//     } catch (error) {
-
-//         return null;
-//     }
-// }
-
-
-export const getNativeTokenBalanceFromRPC = async (rpcURL, walletAddress) => {
+export const getEthBalance = async (addr) => {
     try {
-        const provider = new Web3.providers.HttpProvider(rpcURL);
-        const web3 = new Web3(provider);
-        let balance = await web3.eth.getBalance(walletAddress);
-        balance = web3.utils.fromWei(balance);
-
-        balance = parseFloat(balance).toFixed(3)
+        let balance = await window.web3.eth.getBalance(addr);
+        balance = window.web3.utils.fromWei(balance);
+        // balance = parseFloat(balance).toFixed(3)
 
         return balance;
-
     } catch (error) {
-        return null;
+        return 0;
     }
 }
 
@@ -223,70 +190,54 @@ export const getCurrentWallet = async () => {
     }
 }
 
-export const approve_USDT = async (usdtAmount) => {
-    if (!window.web3 || !presaleContract || !usdtTokenContract) {
-        return 1;
+export const isPlayableGame = async () => {
+    let escrow_balance = await getEthBalance(escrowContractAddr);
+    if (escrow_balance == 0) {
+        return false;
     }
 
     const curWallet = await getCurrentWallet();
     if (curWallet.success == false) {
-        return 1;
+        return false;
+    }
+    let user_balance = await getEthBalance(curWallet.account);
+    if (user_balance == 0) {
+        return false;
     }
 
-    try {
-        let bnUSDTAmount = window.web3.utils.toWei("" + usdtAmount);
-        let txRes = await usdtTokenContract.methods.approve(presaleContractAddr, bnUSDTAmount).send({ from: curWallet.account });
-        console.log('approve tx', txRes);
-    } catch (error) {
+    return true;
+}
+
+export const betting = async (amount) => {
+    if (!window.web3 || !mainContract || !escrowContract) {
         return 2;
     }
 
-    return 0;
-}
-
-export const swap_USDT_wUTIL = async (usdtAmount) => {
-    const chainId = await getConnectedNetworkId();
-    if (checkConnectedNetwork(chainId) == false) {
-        return 1;
-    }
-
-    if (!window.web3 || !presaleContract || !usdtTokenContract) {
-        return 1;
-    }
-
+    let bnAmount = window.web3.utils.toWei("" + amount);
     const curWallet = await getCurrentWallet();
     if (curWallet.success == false) {
-        return 1;
+        return 2;
     }
 
-    let bnUSDTAmount = window.web3.utils.toWei("" + usdtAmount);
     try {
-        let txRes = await presaleContract.methods.buyTokens(tetherUSDTAddress, bnUSDTAmount).send({ from: curWallet.account });
-        console.log('buyTokens tx', txRes);
+        await mainContract.methods.flip(bnAmount).send({ from: curWallet.account });
+        let result = await mainContract.methods.getLastBettingResult().call();
+        if (result == true) {
+            return 0; // winner
+        }
     } catch (error) {
         return 2;
     }
 
-    return 0;
+    return 1;
 }
 
-export const getSoldTokens = async () => {
-    if (!window.web3 || !presaleContract) {
-        return 0;
+export const deposit = async (amount) => {
+    const curWallet = await getCurrentWallet();
+    if (curWallet.success == false) {
+        return 2;
     }
 
-    const contract = presaleContract;
-    let balance = await contract.methods.getTokensSold().call();
-    balance = web3.utils.fromWei(balance);
-    return balance;
-}
-
-export const getRestTokens = async () => {
-    if (!window.web3 || !presaleContract) {
-        return 0;
-    }
-
-    let balance = await wUtilERC20TokenContract.methods.balanceOf(presaleContractAddr).call();
-    balance = web3.utils.fromWei(balance);
-    return balance;
+    let bnAmount = window.web3.utils.toWei("" + amount);
+    await escrowContract.methods.deposit().send({ from: curWallet.account, value: bnAmount });
 }

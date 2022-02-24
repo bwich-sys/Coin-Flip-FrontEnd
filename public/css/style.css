@@ -5467,13 +5467,8 @@ Sell Cryptocurrency Area CSS
 Trade Cryptocurrency Area CSS
 =================================================*/
 .trade-cryptocurrency-area {
-  /* background: -webkit-gradient(linear, left bottom, left top, from(#0062ff), to(#081587));
-  background: linear-gradient(0deg, #0062ff, #081587); */
-
-  background-image: url('/images/background.jpg');
-  background-size: cover;
-  background-repeat: no-repeat;
-
+  background: -webkit-gradient(linear, left bottom, left top, from(#0062ff), to(#081587));
+  background: linear-gradient(0deg, #0062ff, #081587);
   position: relative;
   z-index: 1;
   min-height: 100vh;
